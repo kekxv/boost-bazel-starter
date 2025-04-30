@@ -7,7 +7,6 @@
 #include <array>                       // 使用 std::array
 #include <boost/asio/ip/tcp.hpp> // Include TCP header
 #include <memory>                  // For std::make_shared
-#include <utility>                 // For std::move
 
 namespace asio = boost::asio;
 using boost::system::error_code;
@@ -15,12 +14,12 @@ using boost::system::error_code;
 asio::io_context io_service;
 
 // Coroutine to handle a single TCP client connection
-void session(std::shared_ptr<asio::ip::tcp::socket> sock, asio::yield_context ctx)
+void session(const std::shared_ptr<asio::ip::tcp::socket>& sock, const asio::yield_context& ctx)
 {
-  error_code ec;
   try
   {
-    asio::ip::tcp::endpoint remote_endpoint = sock->remote_endpoint(ec);
+    error_code ec;
+    const asio::ip::tcp::endpoint remote_endpoint = sock->remote_endpoint(ec);
     if (ec)
     {
       std::cerr << "Error getting remote endpoint: " << ec.message() << std::endl;
@@ -36,7 +35,7 @@ void session(std::shared_ptr<asio::ip::tcp::socket> sock, asio::yield_context ct
     for (;;)
     {
       // Read data from the client
-      std::size_t bytes_received = sock->async_read_some(
+      const std::size_t bytes_received = sock->async_read_some(
         asio::buffer(data_buffer), ctx[ec]);
 
       if (ec)
@@ -60,7 +59,7 @@ void session(std::shared_ptr<asio::ip::tcp::socket> sock, asio::yield_context ct
       std::cout << "Received " << bytes_received << " bytes from " << remote_endpoint << std::endl;
 
       // Echo data back to the client
-      std::size_t bytes_sent = asio::async_write(
+      const std::size_t bytes_sent = asio::async_write(
         *sock, asio::buffer(data_buffer, bytes_received), ctx[ec]);
       // Note: Using async_write ensures all data is sent
 
@@ -69,11 +68,8 @@ void session(std::shared_ptr<asio::ip::tcp::socket> sock, asio::yield_context ct
         std::cerr << "Error writing to " << remote_endpoint << ": " << ec.message() << std::endl;
         break; // Exit loop on write error
       }
-      else
-      {
-        // Assuming async_write sent everything if no error
-        std::cout << "Sent " << bytes_received << " bytes back to " << remote_endpoint << std::endl;
-      }
+      // Assuming async_write sent everything if no error
+      std::cout << "Sent " << bytes_sent << " bytes back to " << remote_endpoint << std::endl;
     }
   }
   catch (const std::exception& e)
@@ -88,11 +84,11 @@ void session(std::shared_ptr<asio::ip::tcp::socket> sock, asio::yield_context ct
 
 
 // Listener coroutine to accept incoming TCP connections
-void listenTCP(asio::yield_context ctx)
+void listenTCP(const asio::yield_context& ctx)
 {
   error_code ec;
 
-  asio::ip::tcp::endpoint local_endpoint(asio::ip::tcp::v4(), 1234);
+  const asio::ip::tcp::endpoint local_endpoint(asio::ip::tcp::v4(), 1234);
   asio::ip::tcp::acceptor acceptor(io_service);
 
   // 1. Open the acceptor
@@ -153,10 +149,10 @@ void listenTCP(asio::yield_context ctx)
 
       // 6. Spawn a new coroutine ('session') to handle the accepted connection
       // Pass the socket using std::move (ownership transferred to shared_ptr inside session)
-      asio::spawn(io_service, [sock](asio::yield_context yield_ctx) mutable
+      asio::spawn(io_service, [sock](const asio::yield_context& yield_ctx) mutable
                   {
-                    session(std::move(sock), yield_ctx);
-                  }, [](std::exception_ptr p)
+                    session(sock, yield_ctx);
+                  }, [](const std::exception_ptr& p)
                   {
                     // Exception handler for session coroutine
                     if (p)
@@ -190,7 +186,7 @@ void listenTCP(asio::yield_context ctx)
 int main()
 {
   // Spawn the listener coroutine
-  asio::spawn(io_service, listenTCP, [](std::exception_ptr p)
+  asio::spawn(io_service, listenTCP, [](const std::exception_ptr& p)
   {
     // ... (main exception handling remains the same) ...
     if (p)
