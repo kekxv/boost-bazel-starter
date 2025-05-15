@@ -1,0 +1,2 @@
+build           --@boost.asio//:ssl=boringssl
+build           --@boost.mysql//:ssl=boringssl
